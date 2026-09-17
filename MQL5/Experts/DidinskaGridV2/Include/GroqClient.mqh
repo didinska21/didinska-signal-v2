@@ -209,6 +209,16 @@ private:
       payload += "],";
       payload += "\"max_tokens\":" + IntegerToString(m_max_tokens) + ",";
       payload += "\"temperature\":" + DoubleToString(m_temperature, 2) + ",";
+      // PENJELASAN FIX: openai/gpt-oss-120b adalah model reasoning -- dia
+      // "berpikir" dulu (memakai sebagian max_tokens) sebelum menulis
+      // jawaban akhir. Kalau reasoning_effort dibiarkan default ("medium"),
+      // pada prompt yang kompleks (terutama AI Penyimpul yang merangkum 10
+      // opini) token bisa habis duluan di fase reasoning sebelum sempat
+      // menulis JSON -> Groq balas HTTP 400 "json_validate_failed" dengan
+      // failed_generation KOSONG (bukan salah format, tapi memang belum
+      // sempat menulis apa-apa). "low" mengurangi token yang dipakai untuk
+      // reasoning, menyisakan lebih banyak jatah untuk JSON akhir.
+      payload += "\"reasoning_effort\":\"low\",";
       payload += "\"response_format\":{\"type\":\"json_object\"}";
       payload += "}";
 
