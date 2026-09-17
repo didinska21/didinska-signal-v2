@@ -65,7 +65,7 @@ input group "--- AI - Konfigurasi Umum ---"
 input bool     InpUseAIAnalysis      = true;   // Aktifkan Analisa AI (10 analis + Penyimpul)
 input string   InpGroqModel          = "openai/gpt-oss-120b"; // Model Groq
 input int      InpAIAnalysisInterval = 600;    // Interval Siklus Analisa AI Penuh (detik) - default 10 menit
-input int      InpAIMaxTokens        = 800;    // Max token per panggilan AI analis
+input int      InpAIMaxTokens        = 1500;   // Max token per panggilan AI analis (JANGAN di bawah 1000 - gpt-oss-120b butuh token utk reasoning+JSON)
 input int      InpAITimeoutMs        = 30000;  // Timeout tiap panggilan API (ms)
 
 input group "--- Market Data - Simbol Referensi & Sesi ---"
