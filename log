@@ -1,0 +1,17 @@
+2026.09.17 09:13:33.343	DidinskaGridV2 (XAUUSD,M1)	GroqClient: Initialize selesai. 12/12 slot API key terisi.
+2026.09.17 09:13:33.756	DidinskaGridV2 (XAUUSD,M1)	NewsAPI: Connected successfully
+2026.09.17 09:13:33.756	DidinskaGridV2 (XAUUSD,M1)	TelegramNotify: notifikasi aktif.
+2026.09.17 09:13:33.756	DidinskaGridV2 (XAUUSD,M1)	Didinska Grid V2 Initialized
+2026.09.17 09:13:33.756	DidinskaGridV2 (XAUUSD,M1)	AI Analysis: ENABLED
+2026.09.17 09:13:33.756	DidinskaGridV2 (XAUUSD,M1)	News Filter: ENABLED
+2026.09.17 09:13:33.756	DidinskaGridV2 (XAUUSD,M1)	Telegram Notify: ENABLED
+2026.09.17 09:13:33.756	DidinskaGridV2 (XAUUSD,M1)	New trading day started. Balance: 2352.97
+2026.09.17 09:13:33.834	DidinskaGridV2 (XAUUSD,M1)	=== Memulai siklus analisa AI penuh ===
+2026.09.17 09:13:55.086	DidinskaGridV2 (XAUUSD,M1)	GroqClient: slot 10 gagal, HTTP status=400 body={"error":{"message":"Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details.","type":"invalid_request_error","code":"json_validate_failed","failed_generation":""}
+2026.09.17 09:13:55.086	DidinskaGridV2 (XAUUSD,M1)	GroqClient: slot 10 gagal (HTTP status 400), mencoba slot cadangan (12)...
+2026.09.17 09:13:57.265	DidinskaGridV2 (XAUUSD,M1)	GroqClient: slot 11 gagal, HTTP status=400 body={"error":{"message":"Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details.","type":"invalid_request_error","code":"json_validate_failed","failed_generation":""}
+2026.09.17 09:13:57.265	DidinskaGridV2 (XAUUSD,M1)	GroqClient: panggilan untuk slot 10 gagal total (primer & cadangan). Detail: HTTP status 400
+2026.09.17 09:13:57.265	DidinskaGridV2 (XAUUSD,M1)	AISummarizer: AI Penyimpul gagal total (HTTP status 400), memakai fallback native.
+2026.09.17 09:13:57.265	DidinskaGridV2 (XAUUSD,M1)	Keputusan Final: BUY | Probabilitas=0.60 | Analis Sepakat=6/10 | Analis Gagal=0/10 | [FALLBACK NATIVE DIPAKAI]
+2026.09.17 09:13:57.265	DidinskaGridV2 (XAUUSD,M1)	Alasan: Fallback native (AI Penyimpul gagal total): voting berbobot confidence dari 10 analis yang berhasil, bias BULLISH.
+2026.09.17 09:13:58.233	DidinskaGridV2 (XAUUSD,M1)	BuildSmartGrid: Buy=3 Sell=1 Jarak=300 poin (multiplier 1.0x) Lot=2.5
