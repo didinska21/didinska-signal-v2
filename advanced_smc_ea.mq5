@@ -66,7 +66,7 @@ input group "═════════ SCALPING SETTINGS ═══════
 input int ScalpingTargetPips = 15;                                                    // Scalping target (pips)
 input int ScalpingStopPips = 25;                                                      // Scalping stop loss (pips)
 input int MinProfitToClose = 8;                                                       // Minimum profit to close scalp (pips)
-input bool EnableNews避Scalping = true;                                               // Avoid scalping during news
+input bool EnableNewsAvoidScalping = true;                                            // Avoid scalping during news
 input int MaxScalpTimeMinutes = 15;                                                   // Maximum time to hold scalp (minutes)
 
 //--- Enhanced Global Variables
@@ -279,7 +279,7 @@ void ManageActiveTrades()
 //+------------------------------------------------------------------+
 void ManageScalpingTrade(int trade_index)
 {
-    TradeInfo &trade = ActiveTrades[trade_index];
+    TradeInfo trade = ActiveTrades[trade_index];
     
     // Quick exit if profitable
     if (trade.current_profit_pips >= MinProfitToClose)
@@ -311,7 +311,7 @@ void ManageScalpingTrade(int trade_index)
 //+------------------------------------------------------------------+
 void ManageSwingTrade(int trade_index)
 {
-    TradeInfo &trade = ActiveTrades[trade_index];
+    TradeInfo trade = ActiveTrades[trade_index];
     
     if (!EnablePartialProfitTaking) return;
     
@@ -320,6 +320,7 @@ void ManageSwingTrade(int trade_index)
     {
         PartialClosePosition(trade.ticket, PartialClosePercent1, "PARTIAL-1");
         trade.partial1_closed = true;
+        ActiveTrades[trade_index] = trade;
         Print("📊 PARTIAL CLOSE 1: Ticket ", trade.ticket, " | ", PartialClosePercent1, "% at ", 
               DoubleToString(trade.current_profit_pips, 1), " pips");
     }
@@ -328,6 +329,7 @@ void ManageSwingTrade(int trade_index)
     {
         PartialClosePosition(trade.ticket, PartialClosePercent2, "PARTIAL-2");
         trade.partial2_closed = true;
+        ActiveTrades[trade_index] = trade;
         Print("📊 PARTIAL CLOSE 2: Ticket ", trade.ticket, " | ", PartialClosePercent2, "% at ", 
               DoubleToString(trade.current_profit_pips, 1), " pips");
     }
@@ -336,6 +338,7 @@ void ManageSwingTrade(int trade_index)
     {
         PartialClosePosition(trade.ticket, PartialClosePercent3, "PARTIAL-3");
         trade.partial3_closed = true;
+        ActiveTrades[trade_index] = trade;
         Print("📊 PARTIAL CLOSE 3: Ticket ", trade.ticket, " | ", PartialClosePercent3, "% at ", 
               DoubleToString(trade.current_profit_pips, 1), " pips");
     }
@@ -344,6 +347,7 @@ void ManageSwingTrade(int trade_index)
     if (EnableTrailingOnProfit && trade.current_profit_pips >= MinProfitForTrailing && !trade.trailing_active)
     {
         trade.trailing_active = true;
+        ActiveTrades[trade_index] = trade;
         Print("🔄 TRAILING STARTED: Ticket ", trade.ticket, " at ", 
               DoubleToString(trade.current_profit_pips, 1), " pips profit");
     }
@@ -471,8 +475,11 @@ void ExecuteScalpTrade(ENUM_ORDER_TYPE type, ENUM_TIMEFRAMES timeframe, int tf_i
     
     string comment = TradeComment + "-SCALP-" + TimeframeToString(timeframe) + "-C" + IntegerToString(confluence);
     
-    MqlTradeRequest request = {0};
-    MqlTradeResult result = {0};
+    MqlTradeRequest request;
+    MqlTradeResult result;
+    
+    ZeroMemory(request);
+    ZeroMemory(result);
     
     request.action = TRADE_ACTION_DEAL;
     request.symbol = _Symbol;
@@ -517,8 +524,11 @@ void ExecuteSwingTrade(ENUM_ORDER_TYPE type, ENUM_TIMEFRAMES timeframe, int tf_i
     
     string comment = TradeComment + "-SWING-" + TimeframeToString(timeframe) + "-C" + IntegerToString(confluence);
     
-    MqlTradeRequest request = {0};
-    MqlTradeResult result = {0};
+    MqlTradeRequest request;
+    MqlTradeResult result;
+    
+    ZeroMemory(request);
+    ZeroMemory(result);
     
     request.action = TRADE_ACTION_DEAL;
     request.symbol = _Symbol;
@@ -680,8 +690,11 @@ bool ClosePosition(ulong ticket, string reason)
 {
     if (!PositionSelectByTicket(ticket)) return false;
     
-    MqlTradeRequest request = {0};
-    MqlTradeResult result = {0};
+    MqlTradeRequest request;
+    MqlTradeResult result;
+    
+    ZeroMemory(request);
+    ZeroMemory(result);
     
     request.action = TRADE_ACTION_DEAL;
     request.symbol = PositionGetString(POSITION_SYMBOL);
@@ -711,8 +724,11 @@ bool PartialClosePosition(ulong ticket, double percent, string reason)
     
     if (close_volume >= current_volume) return ClosePosition(ticket, reason);
     
-    MqlTradeRequest request = {0};
-    MqlTradeResult result = {0};
+    MqlTradeRequest request;
+    MqlTradeResult result;
+    
+    ZeroMemory(request);
+    ZeroMemory(result);
     
     request.action = TRADE_ACTION_DEAL;
     request.symbol = PositionGetString(POSITION_SYMBOL);
