@@ -1,22 +1,23 @@
 //@version=5
-indicator("SMC Gap & FVG Setup", overlay=true, max_bars_back=500)
+indicator("SMC Gap & FVG (XAUUSD Version)", overlay=true, max_bars_back=500)
 
-// 1. Mengambil Data High & Low Hari Sebelumnya
+// 1. Mengambil Data High, Low, dan Close Hari Sebelumnya
 prevHigh = request.security(syminfo.tickerid, "D", high[1], lookahead=barmerge.lookahead_on)
 prevLow = request.security(syminfo.tickerid, "D", low[1], lookahead=barmerge.lookahead_on)
+prevClose = request.security(syminfo.tickerid, "D", close[1], lookahead=barmerge.lookahead_on)
 
-// Menggambar Garis High dan Low Harian
+// Menggambar Garis High dan Low Harian (Untuk target Take Profit)
 plot(prevHigh, color=color.new(color.blue, 30), title="Prev Day High", style=plot.style_stepline, linewidth=2)
 plot(prevLow, color=color.new(color.blue, 30), title="Prev Day Low", style=plot.style_stepline, linewidth=2)
 
-// 2. Mendeteksi Gap Pembukaan (Gap Up atau Gap Down)
+// 2. Mendeteksi Gap Pembukaan berdasarkan Harga Penutupan (Close)
 var bool isGapUp = false
 var bool isGapDown = false
 
 // Mengecek setiap pergantian hari
 if ta.change(time("D"))
-    isGapUp := open > prevHigh
-    isGapDown := open < prevLow
+    isGapUp := open > prevClose
+    isGapDown := open < prevClose
 
 // 3. Logika Mendeteksi FVG (Fair Value Gap)
 // Bullish FVG (Demand): Harga terendah candle ke-1 lebih tinggi dari harga tertinggi candle ke-3
@@ -33,5 +34,5 @@ setup_sell = isGapUp and bearish_fvg
 setup_buy = isGapDown and bullish_fvg
 
 // Menampilkan Label/Sinyal di Chart
-plotshape(setup_sell, title="Setup Sell (Gap Up + FVG)", text="FVG", style=shape.labeldown, location=location.abovebar, color=color.red, textcolor=color.white, size=size.small)
-plotshape(setup_buy, title="Setup Buy (Gap Down + FVG)", text="FVG", style=shape.labelup, location=location.belowbar, color=color.green, textcolor=color.white, size=size.small)
+plotshape(setup_sell, title="Setup Sell", text="FVG", style=shape.labeldown, location=location.abovebar, color=color.red, textcolor=color.white, size=size.small)
+plotshape(setup_buy, title="Setup Buy", text="FVG", style=shape.labelup, location=location.belowbar, color=color.green, textcolor=color.white, size=size.small)
