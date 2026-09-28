@@ -248,7 +248,7 @@ bool UpdateSetups()
    //--- Process setiap event yang belum dalam doneIds
    for(int e = 0; e < eventCount && g_setupCount < 10; e++)
      {
-      SMC_Event &ev = events[e];
+      SMC_Event ev = events[e];
       if(!ev.found)
          continue;
 
@@ -292,7 +292,7 @@ bool UpdateSetups()
       RefineZone(ev.dir, bLow, bHigh, tFrom, tTo, rLow, rHigh, refKind);
 
       // Tambah ke array setups
-      SMC_Setup &setup = g_setups[g_setupCount];
+      SMC_Setup setup;
       setup.active   = true;
       setup.dir      = ev.dir;
       setup.isChoch  = ev.isChoch;
@@ -307,6 +307,8 @@ bool UpdateSetups()
 
       if((ev.dir < 0 && !InpTradeShort) || (ev.dir > 0 && !InpTradeLong))
          setup.active = false;
+
+      g_setups[g_setupCount] = setup;
 
       if(setup.active)
         {
@@ -589,7 +591,7 @@ int RefineZone(const int dir, const double bLow, const double bHigh,
 //+------------------------------------------------------------------+
 void CheckEntry(const int setupIdx)
   {
-   SMC_Setup &setup = g_setups[setupIdx];
+   SMC_Setup setup = g_setups[setupIdx];
    
    if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED))
       return;
@@ -612,6 +614,7 @@ void CheckEntry(const int setupIdx)
       if(entry >= sl)
        {
         setup.active = false;
+        g_setups[setupIdx] = setup;
         return;
        }
      }
@@ -624,6 +627,7 @@ void CheckEntry(const int setupIdx)
       if(entry <= sl)
        {
         setup.active = false;
+        g_setups[setupIdx] = setup;
         return;
        }
      }
@@ -659,6 +663,7 @@ void CheckEntry(const int setupIdx)
    if(sent)
      {
       setup.active = false;
+      g_setups[setupIdx] = setup;
       for(int i = 0; i < 10; i++)
         {
          if(g_doneIds[i] == 0)
@@ -675,6 +680,7 @@ void CheckEntry(const int setupIdx)
       setup.attempts++;
       if(setup.attempts >= 3)
          setup.active = false;
+      g_setups[setupIdx] = setup;
      }
   }
 
