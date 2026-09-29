@@ -3,8 +3,8 @@
 //|        Gap-Up Opening -> CHoCH -> FVG/OB -> Refine -> Entry       |
 //+------------------------------------------------------------------+
 #property copyright "SMC Gap Open MTF EA"
-#property version   "1.00"
-#property description "Gap-up opening + CHoCH + FVG/OB (Base TF) + Refinement (Refine TF)"
+#property version   "1.10"
+#property description "Gap-up + CHoCH/BOS/Thrust-FVG + FVG/OB (Base TF) + Refine gabungan (Refine TF)"
 
 #include <Trade\Trade.mqh>
 
@@ -23,9 +23,15 @@
        otomatis dihitung CHoCH bearish.
     c. Di leg impulsif yang menembus struktur, cari FVG (imbalance) atau
        Order Block -> inilah "Indicator Zone".
+    d. KHUSUS LONG, jika belum ada CHoCH/BOS sama sekali (baru mulai sesi):
+       FVG yang terbentuk dari thrust naik di candle-candle PERTAMA sesi
+       (langsung dari gap-up, tanpa swing yang ditembus) juga dipakai
+       sebagai "Indicator Zone" -> InpAllowOpenThrust.
 
  3. REFINE: zona Base TF dipertajam dengan mencari FVG / OB di Refine TF
-    (mis. M1) yang berada di DALAM zona Base TF.
+    (mis. M1) yang berada di DALAM zona Base TF. Jika FVG & OB refine
+    sama-sama ketemu dan berdekatan, keduanya bisa digabung jadi satu
+    zona (SL di sisi terluar OB, entry di sisi FVG) -> InpRefineCombineOBFVG.
 
  4. TIAP TICK (ringan): jika harga pullback menyentuh zona refine -> ENTRY.
       SELL (PE): CHoCH bearish, harga naik menyentuh zona supply.
@@ -96,6 +102,9 @@ input int             InpMinRefineFVGPoints = 1;                 // Ukuran FVG m
 input bool            InpOBBodyOnly         = false;             // OB = body candle saja (false = high-low penuh)
 input int             InpZoneMaxAgeBars     = 60;                // Umur maks. setup (candle Base TF sejak CHoCH)
 input bool            InpAllowBaseFallback  = true;              // Jika refine gagal, pakai zona Base TF
+input bool            InpAllowOpenThrust    = true;              // LONG dari FVG thrust pembukaan (tanpa CHoCH/BOS)
+input int             InpOpenThrustMaxBars  = 6;                 // Jumlah candle awal sesi yg dihitung "thrust"
+input bool            InpRefineCombineOBFVG = true;              // Gabung OB+FVG jadi 1 zona refine (seperti video)
 
 input group "=== 4. RISK MANAGEMENT ==="
 input ENUM_LOT_MODE   InpLotMode            = LOT_RISK_PERCENT;  // Mode ukuran lot
@@ -135,6 +144,7 @@ struct SMC_Setup
    bool     active;    // true = sedang menunggu pullback ke zona
    int      dir;       // +1 = BUY (CE), -1 = SELL (PE)
    bool     isChoch;
+   bool     isThrust;  // true = bukan dari CHoCH/BOS, tapi FVG thrust pembukaan (skenario video 1)
    datetime id;        // waktu candle penembus -> ID unik setup
    double   baseLow;   // batas bawah zona Base TF
    double   baseHigh;  // batas atas zona Base TF
@@ -343,34 +353,35 @@ bool UpdateSetup()
       return false;
    g_sessionOpen = rb[openIdx].time;
 
-   //--- (3) Deteksi struktur: CHoCH / BOS terakhir sejak open
+   //--- (3) Deteksi struktur: CHoCH / BOS terakhir sejak open -> FVG/OB jadi Indicator Zone
    SMC_Event ev;
-   if(!ScanStructure(rb, got, openIdx, ev))
-     {
-      ResetSetup(g_setup);
-      UpdatePanel("Gap-up terdeteksi. Menunggu CHoCH...");
-      return true;
-     }
-
-   //--- (4) Setup kadaluarsa?
-   if(ev.breakIdx > InpZoneMaxAgeBars)
-     {
-      ResetSetup(g_setup);
-      UpdatePanel("Setup terakhir kadaluarsa. Menunggu struktur baru...");
-      return true;
-     }
-
-   //--- (5) Cari INDICATOR ZONE di Base TF (FVG / Order Block)
    double bLow = 0.0, bHigh = 0.0;
    int    kind = 0, iOld = 0, iNew = 0;
-   if(!FindBaseZone(rb, got, ev, bLow, bHigh, kind, iOld, iNew))
+   bool   haveZone = false;
+   bool   isThrust = false;
+
+   if(ScanStructure(rb, got, openIdx, ev) && ev.breakIdx <= InpZoneMaxAgeBars)
+      haveZone = FindBaseZone(rb, got, ev, bLow, bHigh, kind, iOld, iNew);
+
+   //--- (3b) Belum ada CHoCH/BOS yang menghasilkan zona -> coba FVG thrust pembukaan
+   //    (skenario video 1: LONG langsung dari FVG di candle pertama sesi, tanpa
+   //    perlu menembus swing apa pun dulu).
+   if(!haveZone && InpTradeLong && InpAllowOpenThrust &&
+      FindOpenThrustZone(rb, openIdx, InpOpenThrustMaxBars, ev, bLow, bHigh, iOld, iNew))
+     {
+      haveZone = true;
+      isThrust = true;
+      kind     = 1;                     // thrust selalu berupa FVG
+     }
+
+   if(!haveZone)
      {
       ResetSetup(g_setup);
-      UpdatePanel("Struktur berubah, tetapi FVG/OB yang valid belum ditemukan.");
+      UpdatePanel("Gap-up terdeteksi. Menunggu CHoCH atau thrust FVG pembukaan...");
       return true;
      }
 
-   //--- (6) INVALIDASI: setelah tembusan, jika ada candle CLOSE menembus sisi
+   //--- (4) INVALIDASI: setelah tembusan, jika ada candle CLOSE menembus sisi
    //    jauh zona (di atas zona SELL / di bawah zona BUY), zona dianggap gagal.
    for(int k = ev.breakIdx - 1; k >= 1; k--)
      {
@@ -382,7 +393,7 @@ bool UpdateSetup()
         }
      }
 
-   //--- (7) REFINE ke timeframe kecil.
+   //--- (5) REFINE ke timeframe kecil.
    //    Jendela waktu = candle-candle Base TF yang membentuk zona.
    const datetime tFrom = rb[iOld].time;
    const datetime tTo   = rb[iNew].time + PeriodSeconds(InpBaseTF) - 1;
@@ -408,12 +419,13 @@ bool UpdateSetup()
       refKind = 0;
      }
 
-   //--- (8) Simpan setup
+   //--- (6) Simpan setup
    SMC_Setup cand;
    ResetSetup(cand);
    cand.active   = true;
    cand.dir      = ev.dir;
    cand.isChoch  = ev.isChoch;
+   cand.isThrust = isThrust;
    cand.id       = rb[ev.breakIdx].time;
    cand.baseLow  = bLow;
    cand.baseHigh = bHigh;
@@ -427,12 +439,13 @@ bool UpdateSetup()
    if(cand.dir < 0 && !InpTradeShort)        cand.active = false;
    if(cand.dir > 0 && !InpTradeLong)         cand.active = false;
 
-   const bool isNew = (cand.id != g_setup.id);
+   const bool   isNew  = (cand.id != g_setup.id);
+   const string evName = isThrust ? "Thrust-FVG" : (ev.isChoch ? "CHoCH" : "BOS");
    g_setup = cand;
 
    if(isNew)
       PrintFormat("[SMC-GAP] %s %s @ %s | level %s | zona base (%s) %s - %s | zona refine (%s) %s - %s",
-                  (ev.isChoch ? "CHoCH" : "BOS"), (ev.dir < 0 ? "BEARISH" : "BULLISH"),
+                  evName, (ev.dir < 0 ? "BEARISH" : "BULLISH"),
                   TimeToString(cand.id, TIME_DATE | TIME_MINUTES),
                   DoubleToString(ev.level, _Digits),
                   (kind == 1 ? "FVG" : "OB"),
@@ -443,7 +456,7 @@ bool UpdateSetup()
    DrawSetup(ev, cand, rb[ev.swingIdx].time, rb[ev.breakIdx].time, tFrom);
 
    string st = StringFormat("%s %s | zona refine %s - %s | ",
-                            (ev.isChoch ? "CHoCH" : "BOS"), (ev.dir < 0 ? "bearish" : "bullish"),
+                            evName, (ev.dir < 0 ? "bearish" : "bullish"),
                             DoubleToString(rLow, _Digits), DoubleToString(rHigh, _Digits));
    st += (cand.active ? "MENUNGGU pullback ke zona" : "tidak aktif (sudah dieksekusi / arah dimatikan)");
    UpdatePanel(st);
@@ -712,10 +725,65 @@ bool FindBaseZone(const MqlRates &r[], const int total, const SMC_Event &ev,
   }
 
 //+------------------------------------------------------------------+
+//| FindOpenThrustZone                                               |
+//| Skenario TANPA CHoCH/BOS (lihat video 1): candle-candle PALING   |
+//| AWAL sesi (sejak gap-up) langsung membentuk FVG BULLISH (thrust  |
+//| ke atas), sebelum ada swing apa pun yang bisa ditembus. Begitu   |
+//| harga pullback dan meng-retest FVG ini, dianggap sinyal LONG.    |
+//| HANYA dipanggil jika ScanStructure()+FindBaseZone() belum        |
+//| menghasilkan zona apa pun.                                       |
+//|                                                                  |
+//| Caranya sama seperti pencarian FVG di FindBaseZone (3 candle:    |
+//| a = tertua, c = terbaru, celah jika HIGH[a] < LOW[c]), tapi      |
+//| dibatasi hanya pada InpOpenThrustMaxBars candle pertama sesi,    |
+//| dan diambil yang PALING DEKAT dengan candle open (paling awal).  |
+//+------------------------------------------------------------------+
+bool FindOpenThrustZone(const MqlRates &r[], const int openIdx, const int maxBars,
+                        SMC_Event &ev, double &zLow, double &zHigh, int &iOld, int &iNew)
+  {
+   ev.found = false;
+   const double minFvg = InpMinFVGPoints * _Point;
+   const int    oldest = MathMax(1, openIdx - maxBars + 1);   // batas tertua yg masih "pembukaan sesi"
+
+   // a = candle tertua kandidat (mulai dari candle open sesi), c = a-2 = candle terbaru
+   for(int a = openIdx; a >= oldest + 2; a--)
+     {
+      const int c = a - 2;
+      if(c < oldest)
+         break;
+      if(!(r[a].high < r[c].low))          // FVG bullish: high[a] < low[c]
+         continue;
+      const double lo = r[a].high;
+      const double hi = r[c].low;
+      if(hi - lo < minFvg)
+         continue;
+
+      ev.found     = true;
+      ev.dir       = +1;
+      ev.isChoch   = false;
+      ev.breakIdx  = c;                    // candle terbaru penyusun FVG (utk cek usia & invalidasi)
+      ev.swingIdx  = openIdx;              // dipakai hanya utk gambar garis (dari open sesi)
+      ev.originIdx = a;                    // candle tertua penyusun FVG
+      ev.level     = r[openIdx].low;
+
+      zLow  = lo;
+      zHigh = hi;
+      iOld  = a;
+      iNew  = c;
+      return true;                         // ambil yang PERTAMA (paling dekat open sesi)
+     }
+   return false;
+  }
+
+//+------------------------------------------------------------------+
 //| RefineZone                                                       |
 //| Pertajam zona Base TF dengan FVG / OB di Refine TF (mis. M1).    |
 //| Hanya blok yang beririsan dengan zona Base yang dipakai, lalu    |
 //| dipotong agar tetap berada di dalam zona Base.                   |
+//| Jika InpRefineCombineOBFVG aktif dan FVG & OB SAMA-SAMA ketemu,  |
+//| keduanya digabung (union): batas terdekat dari FVG dipakai untuk |
+//| entry, batas terjauh dari OB dipakai untuk SL - persis seperti   |
+//| kotak "ORDER BLOCK" + "FVG" yang ditumpuk di video 3.            |
 //| Return: 1 = ketemu, 0 = tidak ada blok, -1 = data belum siap.    |
 //+------------------------------------------------------------------+
 int RefineZone(const int dir, const double bLow, const double bHigh,
@@ -730,10 +798,10 @@ int RefineZone(const int dir, const double bLow, const double bHigh,
    if(n < 1)
       return -1;
 
-   //--- (1) FVG di Refine TF (aturan sama dengan Base TF) yang beririsan dengan zona Base
+   //--- (1) FVG TERBESAR di Refine TF (aturan sama dengan Base TF), dipotong ke dalam zona Base
    const double minFvg = InpMinRefineFVGPoints * _Point;
-   bool   found = false;
-   double bestSize = 0.0, bestLow = 0.0, bestHigh = 0.0;
+   bool   fvgFound = false;
+   double fvgLow = 0.0, fvgHigh = 0.0, fvgSize = 0.0;
    for(int mm = 1; mm <= n - 2; mm++)
      {
       const int a = mm + 1;                    // lebih lama
@@ -758,24 +826,19 @@ int RefineZone(const int dir, const double bLow, const double bHigh,
       const double sz = hi - lo;
       if(sz <= 0.0 || sz < minFvg)
          continue;
-      if(sz > bestSize)
+      if(sz > fvgSize)
         {
-         found    = true;
-         bestSize = sz;
-         bestLow  = lo;
-         bestHigh = hi;
+         fvgFound = true;
+         fvgSize  = sz;
+         fvgLow   = lo;
+         fvgHigh  = hi;
         }
      }
-   if(found)
-     {
-      rLow    = bestLow;
-      rHigh   = bestHigh;
-      refKind = 1;
-      return 1;
-     }
 
-   //--- (2) Tidak ada FVG -> cari Order Block di Refine TF
-   //    (index 0 = candle terbaru dalam jendela, mundur ke masa lalu)
+   //--- (2) Order Block (candle berlawanan arah TERAKHIR sebelum leg impulsif di jendela ini),
+   //    dipotong ke dalam zona Base. (index 0 = candle terbaru, mundur ke masa lalu)
+   bool   obFound = false;
+   double obLow = 0.0, obHigh = 0.0;
    for(int k = 0; k < n; k++)
      {
       const bool opposite = (dir < 0) ? (m[k].close > m[k].open)     // SELL: candle bullish
@@ -788,9 +851,28 @@ int RefineZone(const int dir, const double bLow, const double bHigh,
       hi = MathMin(hi, bHigh);
       if(hi - lo <= 0.0)
          continue;                             // tidak beririsan dengan zona Base
-      rLow    = lo;
-      rHigh   = hi;
-      refKind = 2;
+      obFound = true;
+      obLow   = lo;
+      obHigh  = hi;
+      break;
+     }
+
+   //--- (3) Gabungkan / pilih sesuai hasil
+   if(InpRefineCombineOBFVG && fvgFound && obFound)
+     {
+      rLow    = MathMin(fvgLow, obLow);        // sisi terluar (dipakai utk SL)
+      rHigh   = MathMax(fvgHigh, obHigh);
+      refKind = 3;                             // FVG + OB gabungan
+      return 1;
+     }
+   if(fvgFound)
+     {
+      rLow = fvgLow; rHigh = fvgHigh; refKind = 1;
+      return 1;
+     }
+   if(obFound)
+     {
+      rLow = obLow; rHigh = obHigh; refKind = 2;
       return 1;
      }
    return 0;
@@ -805,6 +887,8 @@ string RefineName(const int refKind)
       return "FVG refine";
    if(refKind == 2)
       return "OB refine";
+   if(refKind == 3)
+      return "FVG+OB gabungan";
    return "fallback zona base";
   }
 
@@ -908,7 +992,8 @@ void CheckEntry()
      }
 
    //--- (6) Kirim order
-   const string cmt = StringFormat("SMCGAP %s %s", (g_setup.isChoch ? "CHoCH" : "BOS"),
+   const string cmt = StringFormat("SMCGAP %s %s",
+                                   (g_setup.isThrust ? "Thrust" : (g_setup.isChoch ? "CHoCH" : "BOS")),
                                    (g_setup.dir < 0 ? "SELL" : "BUY"));
    bool sent = false;
    if(g_setup.dir < 0)
@@ -1131,6 +1216,7 @@ void ResetSetup(SMC_Setup &s)
    s.active   = false;
    s.dir      = 0;
    s.isChoch  = false;
+   s.isThrust = false;
    s.id       = 0;
    s.baseLow  = 0.0;
    s.baseHigh = 0.0;
@@ -1163,7 +1249,7 @@ void DrawSetup(const SMC_Event &ev, const SMC_Setup &s,
    const color    cBase = (s.dir < 0) ? C'120,45,45' : C'35,95,65';
    const color    cRef  = (s.dir < 0) ? clrRed : clrLime;
 
-   string lbl = (ev.isChoch ? "CHoCH" : "BOS");
+   string lbl = s.isThrust ? "Thrust FVG" : (ev.isChoch ? "CHoCH" : "BOS");
    lbl += (ev.dir > 0 ? " bullish" : " bearish");
 
    // garis dari swing yang ditembus sampai candle penembus + label
